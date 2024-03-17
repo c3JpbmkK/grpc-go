@@ -35,8 +35,9 @@ const (
 )
 
 var (
-	addr = flag.String("addr", "localhost:50051", "the address to connect to")
-	name = flag.String("name", defaultName, "Name to greet")
+	addr  = flag.String("addr", "localhost:50051", "the address to connect to")
+	name  = flag.String("name", defaultName, "Name to greet")
+	queue = make(chan struct{}, 8)
 )
 
 func main() {
@@ -50,11 +51,17 @@ func main() {
 	c := pb.NewGreeterClient(conn)
 
 	// Contact the server and print out its response.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
-	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
-	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+	for {
+		queue <- struct{}{}
+		go func() {
+			r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
+			if err != nil {
+				log.Fatalf("could not greet: %v", err)
+			}
+			log.Printf("Greeting: %s", r.GetMessage())
+			<-queue
+		}()
 	}
-	log.Printf("Greeting: %s", r.GetMessage())
 }
